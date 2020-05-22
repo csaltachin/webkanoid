@@ -1,8 +1,37 @@
-// Simple Breakout Game
+// Webkanoid
 
 var canvas = document.getElementById("gameCanvas");
 var ctx = canvas.getContext("2d");
-var ballRadius = 10;
+
+class Ball {
+    constructor(r) {
+        this.radius = r;
+        this.x = 0;
+        this.y = 0;
+        this.dx = 0;
+        this.dy = 0;
+        this.color = "#0095DD"; // Default ball color
+    }
+    init(x, y, dx, dy) {
+        this.x = x;
+        this.y = y;
+        this.dx = dx;
+        this.dy = dy;
+    }
+    draw() {
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+        ctx.fillStyle = this.color;
+        ctx.fill();
+        ctx.closePath();
+    }
+    speedUp(factor) {
+        this.dx = factor*this.dx;
+        this.dy = factor*this.dy;
+    }
+}
+
+var ballRadius = 8;
 var x = canvas.width/2;
 var y = canvas.height-30;
 var dx = 3;
@@ -38,10 +67,9 @@ document.addEventListener("mousemove", mouseMoveHandler, false);
  * Initializers
  */
 function initBall() {
-    x = canvas.width/2;
-    y = canvas.height-30;
-    dx = 3;
-    dy = -3;
+    var b = new Ball(8);
+    b.init(canvas.width/2, canvas.height-30, 3, -3);
+    return b;
 }
 
 function initPaddle() {
@@ -60,11 +88,9 @@ function initBricks() {
 function initGame() {
     initBricks();
     initPaddle();
-    initBall();
+    gameBall = initBall();
     score = 0;
 }
-
-initGame();
 
 
 /*
@@ -103,20 +129,48 @@ function mouseMoveHandler(e) {
     }
 }
 
+/*
+ * Wall/collision methods
+ */
 function collisionDetection() {
+    // Handles brick collisions
     for(var c=0; c<brickColumnCount; c++) {
         for(var r=0; r<brickRowCount; r++) {
             var b = bricks[c][r];
             if(b.status == 1) {
-            		if(x > b.x && x < b.x+brickWidth && y > b.y && y < b.y+brickHeight) {
-                		dy = -dy;
+            	if(gameBall.x > b.x && gameBall.x < b.x+brickWidth && gameBall.y > b.y && gameBall.y < b.y+brickHeight) {
+            		gameBall.dy = -gameBall.dy;
                     b.status = 0;
-                    // Add point, speed up ball
+                    // Add point, speed up ball every 20 pts (by default)
                     score++;
-                    dx = dx*1.05;
-                    dy = dy*1.05;
-            		}
+                    if(score%10 == 0) {
+                        gameBall.speedUp(1.05);
+                    }
+            	}
             }
+        }
+    }
+}
+
+function wallDetection() {
+    // Handles wall collisions
+    if(gameBall.x + gameBall.dx > canvas.width-ballRadius || gameBall.x + gameBall.dx < ballRadius) {
+        gameBall.dx = -gameBall.dx;
+    }
+    if(gameBall.y + gameBall.dy < ballRadius) {
+        gameBall.dy = -gameBall.dy;
+    }
+    else if(gameBall.y + gameBall.dy > canvas.height-ballRadius-paddleHover-paddleHeight) {
+    		if(gameBall.y <= canvas.height-ballRadius-paddleHover && paddleX < gameBall.x && gameBall.x < paddleX + paddleWidth) {
+        		gameBall.dy = -gameBall.dy;
+        }
+        else if(gameBall.y + gameBall.dy > canvas.height-ballRadius) {
+        	// Update highscore, draw GAME OVER
+            if(score > highScore) {
+            		highScore = score;
+            }
+            // drawGameOver();
+            alive = false;
         }
     }
 }
@@ -160,7 +214,7 @@ function drawBricks() {
 }
 
 function drawScore() {
-		ctx.font = "16px Consolas";
+	ctx.font = "16px Consolas";
     ctx.fillStyle = "#446673";
     ctx.fillText("Score: " + score, 8, 20)
 }
@@ -187,26 +241,8 @@ function aliveTick() {
     collisionDetection();
     
     // Wall detection
-    if(x + dx > canvas.width-ballRadius || x + dx < ballRadius) {
-        dx = -dx;
-    }
-    if(y + dy < ballRadius) {
-        dy = -dy;
-    }
-    else if(y + dy > canvas.height-ballRadius-paddleHover-paddleHeight) {
-    		if(y <= canvas.height-ballRadius-paddleHover && paddleX < x && x < paddleX + paddleWidth) {
-        		dy = -dy;
-        }
-        else if(y + dy > canvas.height-ballRadius) {
-        	// Update highscore, draw GAME OVER
-            if(score > highScore) {
-            		highScore = score;
-            }
-            drawGameOver();
-            alive = false;
-        }
-    }
-    
+    wallDetection();
+
     // Update paddle pos
     if(rightPressed && paddleX < canvas.width-paddleWidth) {
         paddleX += 7;
@@ -215,17 +251,26 @@ function aliveTick() {
         paddleX -= 7;
     }
     // Update ball pos
-    x += dx;
-    y += dy;
+    gameBall.x += gameBall.dx;
+    gameBall.y += gameBall.dy;
+}
+
+function gameOverTick() {
+    // Game over tick, check for new game
+    drawGameOver();
+    if(spacePressed) {
+        alive = true;
+        initGame();
+    }
 }
 
 /*
  * Main draw()
  */
-function draw() {
+function drawLoop() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawBricks();
-    drawBall();
+    gameBall.draw();
     drawPaddle();
     drawScore();
     
@@ -233,15 +278,13 @@ function draw() {
         aliveTick();
     }
     else {
-        // Game over tick, check for new game
-        drawGameOver();
-        if(spacePressed) {
-            alive = true;
-            initGame();
-        }
+        gameOverTick();
     }
     
-    requestAnimationFrame(draw)
+    requestAnimationFrame(drawLoop);
 }
 
-draw()
+// Start first game (TODO: Welcome state/screen?)
+initGame();
+console.log("All game elements initialized!");
+drawLoop();
