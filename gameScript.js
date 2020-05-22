@@ -1,5 +1,6 @@
 // Webkanoid
 
+var DIR = "file:///C:/Users/csalt/Documents/Code/Web%20stuff/webkanoid";
 var canvas = document.getElementById("gameCanvas");
 var ctx = canvas.getContext("2d");
 
@@ -14,6 +15,37 @@ var brickHeight = 20;
 var brickPadding = 10;
 var brickOffsetTop = 30;
 var brickOffsetLeft = 30;
+
+class AudioFX extends Audio {
+    constructor(src) {
+        super(src);
+    }
+    clonePlay(volume) {
+        if(typeof volume == "undefined") {
+            volume = 0.5; // Default volume level for sound effects
+        }
+        var clone = this.cloneNode();
+        clone.volume = volume;
+        clone.play();
+    }
+}
+
+var SOUND_FX = {
+    // Effects
+    bounce_low: new AudioFX(DIR + "/fx/bounce_low.ogg"),
+    bounce_high: new AudioFX(DIR + "/fx/bounce_high.ogg"),
+    // Load method
+    load_all: function() {
+        for(const effect in this) {
+            if(effect == "load_all") {
+                continue;
+            }
+            this[effect].preload = "auto";
+            this[effect].load();
+        }
+    }
+}
+var DEFAULT_VOL = 0.5;
 
 var score = 0;
 var highScore = 0;
@@ -164,6 +196,8 @@ function collisionDetection() {
                     if(score%10 == 0) {
                         gameBall.speedUp(1.05);
                     }
+                    // Play sound effect
+                    SOUND_FX.bounce_high.clonePlay();
             	}
             }
         }
@@ -174,20 +208,22 @@ function wallDetection() {
     // Handles wall collisions
     if(gameBall.x + gameBall.dx > canvas.width-gameBall.radius || gameBall.x + gameBall.dx < gameBall.radius) {
         gameBall.dx = -gameBall.dx;
+        SOUND_FX.bounce_low.clonePlay();
     }
     if(gameBall.y + gameBall.dy < gameBall.radius) {
         gameBall.dy = -gameBall.dy;
+        SOUND_FX.bounce_low.clonePlay();
     }
     else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius-gamePaddle.hover-gamePaddle.height) {
     		if(gameBall.y <= canvas.height-gameBall.radius-gamePaddle.hover && gamePaddle.x < gameBall.x && gameBall.x < gamePaddle.x + gamePaddle.width) {
-        		gameBall.dy = -gameBall.dy;
+                gameBall.dy = -gameBall.dy;
+                SOUND_FX.bounce_low.clonePlay();
         }
         else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius) {
         	// Update highscore, draw GAME OVER
             if(score > highScore) {
             		highScore = score;
             }
-            // drawGameOver();
             alive = false;
         }
     }
@@ -288,5 +324,6 @@ function drawLoop() {
 
 
 // Start first game (TODO: Welcome state/screen?)
+SOUND_FX.load_all();
 initGame();
 drawLoop();
