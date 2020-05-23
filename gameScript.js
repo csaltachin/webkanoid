@@ -1,6 +1,6 @@
 // Webkanoid
 
-var DIR = "file:///C:/Users/csalt/Documents/Code/Web%20stuff/webkanoid";
+var DIR = "file:///C:/Users/csalt/Documents/Code/Web%20stuff/webkanoid"; // Replace with the directory containing this file
 var canvas = document.getElementById("gameCanvas");
 var ctx = canvas.getContext("2d");
 
