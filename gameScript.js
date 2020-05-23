@@ -14,24 +14,49 @@ var brickWidth = 75;
 var brickHeight = 20;
 var brickPadding = 10;
 var brickOffsetTop = 30;
-var brickOffsetLeft = 30;
+var brickOffsetLeft = 50;
+
+var DEFAULT_VOL = 0.5;
+var CLONE_FX = false; // If true, use clonePlay over rewindPlay (buggy for now)
 
 class AudioFX extends Audio {
     constructor(src) {
         super(src);
     }
     clonePlay(volume) {
-        if(typeof volume == "undefined") {
-            volume = 0.3; // Default volume level for sound effects
+        if(!muted) {
+            if(typeof volume == "undefined") {
+                volume = DEFAULT_VOL; // Default volume level for sound effects
+            }
+            var clone = this.cloneNode();
+            clone.volume = volume;
+            clone.play();
         }
-        var clone = this.cloneNode();
-        clone.volume = volume;
-        clone.play();
+    }
+    rewindPlay(volume) {
+        if(!muted) {
+            if(typeof volume == "undefined") {
+                volume = DEFAULT_VOL; // Default volume level for sound effects
+            }
+            this.volume = volume;
+            this.currentTime = 0;
+            this.play();
+        }
+    }
+    smartPlay() {
+        if(CLONE_FX) {
+            this.clonePlay();
+        }
+        else {
+            this.rewindPlay();
+        }
     }
 }
 
 var SOUND_FX = {
     // Effects
+    welcome: new AudioFX(DIR + "/fx/welcome.ogg"),
+    back_to_menu: new AudioFX(DIR + "/fx/back_to_menu.ogg"),
     bounce_low: new AudioFX(DIR + "/fx/bounce_low.ogg"),
     bounce_high: new AudioFX(DIR + "/fx/bounce_high.ogg"),
     // Load method
@@ -46,15 +71,22 @@ var SOUND_FX = {
         console.log("All audio effects loaded!");
     }
 }
-var DEFAULT_VOL = 0.5;
 
 var score = 0;
 var highScore = 0;
-var alive = true;
+var fastArrowKeys = false;
+
+var alive = false;
+var welcome = true;
+var muted = false;
+var steady = false;
+var steadyCanStart = false;
+var steadyClicked = false;
 
 var rightPressed = false;
 var leftPressed = false;
 var spacePressed = false;
+var xPressed = false;
 
 /*
  * Class definitions for Ball, Paddle
@@ -68,9 +100,11 @@ class Ball {
         this.dy = 0;
         this.color = "#0095DD"; // Default ball color
     }
-    init(x, y, dx, dy) {
+    initPos(x, y, dx, dy) {
         this.x = x;
         this.y = y;
+    }
+    initVel(dx, dy) {
         this.dx = dx;
         this.dy = dy;
     }
@@ -113,15 +147,16 @@ class Paddle {
 document.addEventListener("keydown", keyDownHandler, false);
 document.addEventListener("keyup", keyUpHandler, false);
 document.addEventListener("mousemove", mouseMoveHandler, false);
+canvas.onclick = clickHandler;
 
 
-/*
- * Initializers
+/**
+ * Initializer methods
  */
 function initBall() {
     // Using default dimensions
     var b = new Ball(8);
-    b.init(canvas.width/2, canvas.height-30, 3, -3);
+    b.initPos(canvas.width/2, canvas.height-30);
     return b;
 }
 function initPaddle() {
@@ -146,7 +181,7 @@ function initGame() {
 }
 
 
-/*
+/**
  * Handler methods
  */
 function keyDownHandler(e) {
@@ -159,6 +194,15 @@ function keyDownHandler(e) {
     else if(e.key == " ") {
         spacePressed = true;
     }
+    else if(e.key == "M" || e.key == "m") {
+        muted = !muted;
+    }
+    else if(e.key == "Z" || e.key == "z") {
+        fastArrowKeys = true;
+    }
+    else if(e.key == "X" || e.key == "x") {
+        xPressed = true;
+    }
 }
 function keyUpHandler(e) {
     if(e.key == "Right" || e.key == "ArrowRight") {
@@ -170,13 +214,28 @@ function keyUpHandler(e) {
     else if(e.key == " ") {
         spacePressed = false;
     }
+    else if(e.key == "Z" || e.key == "z") {
+        fastArrowKeys = false;
+    }
+    else if(e.key == "X" || e.key == "x") {
+        xPressed = false;
+    }
 }
 function mouseMoveHandler(e) {
     var relativeX = e.clientX - canvas.offsetLeft;
-    if(alive) {
+    if(alive || steady) {
         if(gamePaddle.width/2 <= relativeX && relativeX <= canvas.width - gamePaddle.width/2) {
-    		gamePaddle.x = relativeX - gamePaddle.width/2;
+            gamePaddle.x = relativeX - gamePaddle.width/2;
+            if(!alive) {
+                gameBall.x = relativeX;
+            }
         }
+    }
+}
+function clickHandler() {
+    //console.log("Click handler fired!");
+    if(steady) {
+        steadyClicked = true;
     }
 }
 
@@ -192,13 +251,13 @@ function collisionDetection() {
             	if(gameBall.x > b.x && gameBall.x < b.x+brickWidth && gameBall.y > b.y && gameBall.y < b.y+brickHeight) {
             		gameBall.dy = -gameBall.dy;
                     b.status = 0;
-                    // Add point, speed up ball every 20 pts (by default)
+                    // Add point, speed up ball every 7 pts (by default)
                     score++;
-                    if(score%10 == 0) {
-                        gameBall.speedUp(1.05);
+                    if(score%7 == 0) {
+                        gameBall.speedUp(1.03);
                     }
                     // Play sound effect
-                    SOUND_FX.bounce_high.clonePlay();
+                    SOUND_FX.bounce_high.smartPlay()
             	}
             }
         }
@@ -209,21 +268,21 @@ function wallDetection() {
     // Handles wall collisions
     if(gameBall.x + gameBall.dx > canvas.width-gameBall.radius || gameBall.x + gameBall.dx < gameBall.radius) {
         gameBall.dx = -gameBall.dx;
-        SOUND_FX.bounce_low.clonePlay();
+        SOUND_FX.bounce_low.smartPlay();
     }
     if(gameBall.y + gameBall.dy < gameBall.radius) {
         gameBall.dy = -gameBall.dy;
-        SOUND_FX.bounce_low.clonePlay();
+        SOUND_FX.bounce_low.smartPlay();
     }
     else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius-gamePaddle.hover-gamePaddle.height) {
-    		if(gameBall.y <= canvas.height-gameBall.radius-gamePaddle.hover && gamePaddle.x < gameBall.x && gameBall.x < gamePaddle.x + gamePaddle.width) {
-                gameBall.dy = -gameBall.dy;
-                SOUND_FX.bounce_low.clonePlay();
+    	if(gameBall.y <= canvas.height-gameBall.radius-gamePaddle.hover && gamePaddle.x < gameBall.x && gameBall.x < gamePaddle.x + gamePaddle.width) {
+            gameBall.dy = -gameBall.dy;
+            SOUND_FX.bounce_low.smartPlay();
         }
         else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius) {
         	// Update highscore, draw GAME OVER
             if(score > highScore) {
-            		highScore = score;
+        		highScore = score;
             }
             alive = false;
         }
@@ -234,6 +293,21 @@ function wallDetection() {
 /*
  * Draw methods
  */
+function fillRoundRect(x, y, width, height, radius) {
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+    ctx.fill();
+}
+
 function drawBricks() {
     for(var c=0; c<brickColumnCount; c++) {
         for(var r=0; r<brickRowCount; r++) {
@@ -255,26 +329,89 @@ function drawBricks() {
 function drawScore() {
 	ctx.font = "16px Consolas";
     ctx.fillStyle = "#446673";
-    ctx.fillText("Score: " + score, 8, 20)
+    ctx.fillText("score: " + score, 8, 20);
+}
+
+function drawMuted() {
+    ctx.font = "16px Consolas";
+    var thisWidth = ctx.measureText("[muted]").width;
+    ctx.fillStyle = "#446673";
+    ctx.fillText("[muted]", canvas.width - thisWidth - 8, 20);
 }
 
 function drawGameOver() {
-	ctx.font = "Bold 40px Consolas";
-    ctx.fillStyle = "#446673";
-    var textDims = ctx.measureText("GAME OVER")
-    ctx.fillText("GAME OVER", canvas.width/2 - textDims.width/2, canvas.height/2 + 20);
+    ctx.font = "Bold 40px Consolas";
+    var textDims = ctx.measureText("game over");
+
+    ctx.fillStyle = "#40414a";
+    ctx.globalAlpha = 0.9;
+    fillRoundRect(canvas.width/2 - textDims.width/2 - 10, canvas.height/2 - 25, textDims.width + 20, 100, 10);
+    ctx.globalAlpha = 1;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.fillText("game over", canvas.width/2 - textDims.width/2, canvas.height/2 + 15);
     
     ctx.font = "20px Consolas";
-    var textDims = ctx.measureText("Final score: " + score);
-    ctx.fillText("Final score: " + score, canvas.width/2 - textDims.width/2, canvas.height/2 + 40);
-    var textDims = ctx.measureText("Highscore: " + score);
-    ctx.fillText("Highscore: " + highScore, canvas.width/2 - textDims.width/2, canvas.height/2 + 60);
+    textDims = ctx.measureText("final score: " + score);
+    ctx.fillText("final score: " + score, canvas.width/2 - textDims.width/2, canvas.height/2 + 40);
+    textDims = ctx.measureText("highscore: " + score);
+    ctx.fillText("highscore: " + highScore, canvas.width/2 - textDims.width/2, canvas.height/2 + 60);
+
+    ctx.font = "Bold 18px Consolas"
+    ctx.fillStyle = "#000000"
+    var smallWidth = ctx.measureText("press [SPACE] to play again").width;
+    ctx.fillText("press [SPACE] to play again", canvas.width/2 - smallWidth/2, canvas.height/2 + 225);
+    var smallerWidth = ctx.measureText("press [X] to return to main menu").width;
+    ctx.fillText("press [X] to return to main menu", canvas.width/2 - smallerWidth/2, canvas.height/2 + 255);
+}
+
+function drawWelcome() {
+    ctx.font = "Bold 80px Consolas";
+    bigWidth = ctx.measureText("webkanoid").width;
+
+    // Rounded rectangle
+    ctx.fillStyle = "#0095DD";
+    fillRoundRect(canvas.width/2 - bigWidth/2 - 15, canvas.height/2 - 70, bigWidth + 30, 95, 10);
+
+    // Shadows
+    ctx.fillStyle = "#000000";
+    ctx.fillText("webkanoid", canvas.width/2 - bigWidth/2 + 4, canvas.height/2 + 4);
+    // Foretext
+    ctx.fillStyle = "#446673";
+    ctx.fillText("webkanoid", canvas.width/2 - bigWidth/2, canvas.height/2);
+
+    // Small text
+    ctx.font = "Bold 18px Consolas"
+    ctx.fillStyle = "#000000"
+    smallWidth = ctx.measureText("press [SPACE] to begin!").width;
+    ctx.fillText("press [SPACE] to begin!", canvas.width/2 - smallWidth/2, canvas.height/2 + 70);
+    smallerWidth = ctx.measureText("press [M] to toggle sound").width;
+    ctx.fillText("press [M] to toggle sound", canvas.width/2 - smallerWidth/2, canvas.height/2 + 100);
+}
+
+function drawSteady() {
+    ctx.font = "Bold 18px Consolas"
+    ctx.fillStyle = "#000000"
+    var smallWidth = ctx.measureText("move with mouse or arrow keys (hold [Z] to boost key movement)").width;
+    ctx.fillText("move with mouse or arrow keys (hold [Z] to boost key movement)", canvas.width/2 - smallWidth/2, canvas.height/2 + 225);
+    var smallerWidth = ctx.measureText("click or press [SPACE] to release the ball!").width;
+    ctx.fillText("click or press [SPACE] to release the ball!", canvas.width/2 - smallerWidth/2, canvas.height/2 + 255);
 }
 
 
 /*
  * Tick updaters
  */
+function steadyTick() {
+    // Move paddle and
+    if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
+        gamePaddle.x += 7;
+    }
+    else if(leftPressed && gamePaddle.x > 0) {
+        gamePaddle.x -= 7;
+    }
+}
+
 function aliveTick() {
     // Collision detection
     collisionDetection();
@@ -285,9 +422,15 @@ function aliveTick() {
     // Update paddle pos
     if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
         gamePaddle.x += 7;
+        if(fastArrowKeys) {
+            gamePaddle.x += 5;
+        }
     }
     else if(leftPressed && gamePaddle.x > 0) {
         gamePaddle.x -= 7;
+        if(fastArrowKeys) {
+            gamePaddle.x -= 5;
+        }
     }
     // Update ball pos
     gameBall.x += gameBall.dx;
@@ -298,33 +441,91 @@ function gameOverTick() {
     // Game over tick, check for new game
     drawGameOver();
     if(spacePressed) {
-        alive = true;
+        steady = true;
+        initGame();
+    } else if(xPressed) {
+        welcome = true;
+        SOUND_FX.back_to_menu.clonePlay();
+    }
+}
+
+function welcomeTick() {
+    if(spacePressed) {
+        welcome = false;
+        steady = true;
+        SOUND_FX.welcome.clonePlay();
         initGame();
     }
 }
+
 
 /*
  * Main draw loop
  */
 function drawLoop() {
+    // Clear
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawBricks();
-    gameBall.draw();
-    gamePaddle.draw();
-    drawScore();
-    
+    // Draw
+    if(muted) {
+        drawMuted();
+    }
+    if(welcome) {
+        drawWelcome();
+    }
+    else {
+        drawBricks();
+        gameBall.draw();
+        gamePaddle.draw();
+        drawScore();
+    }
+    // Tick
     if(alive) {
         aliveTick();
+    }
+    else if(steady) {
+        // Steady tick (TODO: Draw instructions/level select?)
+        // Draw steady text
+        drawSteady();
+        // Move paddle w/ keys
+        if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
+            gamePaddle.x += 7;
+            gameBall.x += 7;
+            if(fastArrowKeys) {
+                gamePaddle.x += 5;
+                gameBall.x += 5;
+            }
+        }
+        else if(leftPressed && gamePaddle.x > 0) {
+            gamePaddle.x -= 7;
+            gameBall.x -= 7;
+            if(fastArrowKeys) {
+                gamePaddle.x -= 5;
+                gameBall.x -= 5;
+            }
+        }
+        // Change state to alive
+        if(!spacePressed) {
+            steadyCanStart = true;
+        }
+        if(steadyClicked || (steadyCanStart && spacePressed)) {
+            steady = false;
+            steadyCanStart = false;
+            steadyClicked = false;
+            alive = true;
+            gameBall.initVel(3, -3);
+        }
+    }
+    else if(welcome) {
+        welcomeTick();
     }
     else {
         gameOverTick();
     }
-    
+    // Loop
     requestAnimationFrame(drawLoop);
 }
 
 
 // Start first game (TODO: Welcome state/screen?)
 SOUND_FX.load_all();
-initGame();
 drawLoop();
