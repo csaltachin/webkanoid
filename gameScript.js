@@ -22,7 +22,7 @@ class AudioFX extends Audio {
     }
     clonePlay(volume) {
         if(typeof volume == "undefined") {
-            volume = 0.5; // Default volume level for sound effects
+            volume = 0.3; // Default volume level for sound effects
         }
         var clone = this.cloneNode();
         clone.volume = volume;
@@ -43,6 +43,7 @@ var SOUND_FX = {
             this[effect].preload = "auto";
             this[effect].load();
         }
+        console.log("All audio effects loaded!");
     }
 }
 var DEFAULT_VOL = 0.5;
