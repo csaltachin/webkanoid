@@ -16,15 +16,19 @@ var brickPadding = 10;
 var brickOffsetTop = 30;
 var brickOffsetLeft = 50;
 
+/**
+ * Sound effects
+ */
 var DEFAULT_VOL = 0.5;
-var CLONE_FX = false; // If true, use clonePlay over rewindPlay (buggy for now)
+var CLONE_FX = true; // If true, use clonePlay over rewindPlay (buggy for now)
+var MUTED = false;
 
 class AudioFX extends Audio {
     constructor(src) {
         super(src);
     }
     clonePlay(volume) {
-        if(!muted) {
+        if(!MUTED) {
             if(typeof volume == "undefined") {
                 volume = DEFAULT_VOL; // Default volume level for sound effects
             }
@@ -34,7 +38,7 @@ class AudioFX extends Audio {
         }
     }
     rewindPlay(volume) {
-        if(!muted) {
+        if(!MUTED) {
             if(typeof volume == "undefined") {
                 volume = DEFAULT_VOL; // Default volume level for sound effects
             }
@@ -76,10 +80,13 @@ var score = 0;
 var highScore = 0;
 var fastArrowKeys = false;
 
-var alive = false;
-var welcome = true;
-var muted = false;
-var steady = false;
+var GAME_STATE;
+const STATES = {
+    WELCOME: 0,
+    STEADY: 1,
+    ALIVE: 2, 
+    GAMEOVER: 3.
+}
 var steadyCanStart = false;
 var steadyClicked = false;
 
@@ -141,15 +148,6 @@ class Paddle {
 }
 
 
-/*
- * Add key/mouse listeners
-*/
-document.addEventListener("keydown", keyDownHandler, false);
-document.addEventListener("keyup", keyUpHandler, false);
-document.addEventListener("mousemove", mouseMoveHandler, false);
-canvas.onclick = clickHandler;
-
-
 /**
  * Initializer methods
  */
@@ -182,6 +180,14 @@ function initGame() {
 
 
 /**
+ * Add key/mouse listeners
+ */
+document.addEventListener("keydown", keyDownHandler, false);
+document.addEventListener("keyup", keyUpHandler, false);
+document.addEventListener("mousemove", mouseMoveHandler, false);
+canvas.onclick = clickHandler;
+
+/**
  * Handler methods
  */
 function keyDownHandler(e) {
@@ -195,7 +201,7 @@ function keyDownHandler(e) {
         spacePressed = true;
     }
     else if(e.key == "M" || e.key == "m") {
-        muted = !muted;
+        MUTED = !MUTED;
     }
     else if(e.key == "Z" || e.key == "z") {
         fastArrowKeys = true;
@@ -223,10 +229,10 @@ function keyUpHandler(e) {
 }
 function mouseMoveHandler(e) {
     var relativeX = e.clientX - canvas.offsetLeft;
-    if(alive || steady) {
+    if(GAME_STATE == STATES.ALIVE || GAME_STATE == STATES.STEADY) {
         if(gamePaddle.width/2 <= relativeX && relativeX <= canvas.width - gamePaddle.width/2) {
             gamePaddle.x = relativeX - gamePaddle.width/2;
-            if(!alive) {
+            if(GAME_STATE == STATES.STEADY) {
                 gameBall.x = relativeX;
             }
         }
@@ -234,7 +240,7 @@ function mouseMoveHandler(e) {
 }
 function clickHandler() {
     //console.log("Click handler fired!");
-    if(steady) {
+    if(GAME_STATE == STATES.STEADY) {
         steadyClicked = true;
     }
 }
@@ -284,7 +290,8 @@ function wallDetection() {
             if(score > highScore) {
         		highScore = score;
             }
-            alive = false;
+            GAME_STATE = STATES.GAMEOVER;
+            //console.log("Changed GAME_STATE to GAMEOVER");
         }
     }
 }
@@ -330,6 +337,14 @@ function drawScore() {
 	ctx.font = "16px Consolas";
     ctx.fillStyle = "#446673";
     ctx.fillText("score: " + score, 8, 20);
+}
+
+// Encompasses ball, paddle, bricks, score
+function drawGameElements() {
+    drawBricks();
+    gameBall.draw();
+    gamePaddle.draw();
+    drawScore();
 }
 
 function drawMuted() {
@@ -399,9 +414,9 @@ function drawSteady() {
 }
 
 
-/*
+/**
  * Tick updaters
- */
+*/
 function steadyTick() {
     // Move paddle and
     if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
@@ -441,23 +456,55 @@ function gameOverTick() {
     // Game over tick, check for new game
     drawGameOver();
     if(spacePressed) {
-        steady = true;
+        GAME_STATE = STATES.STEADY;
+        //console.log("Changed GAME_STATE to STEADY");
         initGame();
     } else if(xPressed) {
-        welcome = true;
-        SOUND_FX.back_to_menu.clonePlay();
+        GAME_STATE = STATES.WELCOME;
+        //console.log("Changed GAME_STATE to WELCOME");
+        SOUND_FX.back_to_menu.smartPlay();
     }
 }
 
 function welcomeTick() {
     if(spacePressed) {
-        welcome = false;
-        steady = true;
-        SOUND_FX.welcome.clonePlay();
+        GAME_STATE = STATES.STEADY;
+        //console.log("Changed GAME_STATE to STEADY");
+        SOUND_FX.welcome.smartPlay();
         initGame();
     }
 }
 
+function steadyTick() {
+    // Move paddle while steady
+    if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
+        gamePaddle.x += 7;
+        gameBall.x += 7;
+        if(fastArrowKeys) {
+            gamePaddle.x += 5;
+            gameBall.x += 5;
+        }
+    }
+    else if(leftPressed && gamePaddle.x > 0) {
+        gamePaddle.x -= 7;
+        gameBall.x -= 7;
+        if(fastArrowKeys) {
+            gamePaddle.x -= 5;
+            gameBall.x -= 5;
+        }
+    }
+    // Check for/change state to alive
+    if(!spacePressed) {
+        steadyCanStart = true;
+    }
+    if(steadyClicked || (steadyCanStart && spacePressed)) {
+        steadyCanStart = false;
+        steadyClicked = false;
+        GAME_STATE = STATES.ALIVE;
+        //console.log("Changed GAME_STATE to ALIVE");
+        gameBall.initVel(3, -3);
+    }
+}
 
 /*
  * Main draw loop
@@ -465,67 +512,50 @@ function welcomeTick() {
 function drawLoop() {
     // Clear
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
     // Draw
-    if(muted) {
+    switch(GAME_STATE) {
+        case STATES.WELCOME:
+            drawWelcome();
+            break;
+        case STATES.STEADY:
+            drawGameElements();
+            drawSteady();
+            break;
+        case STATES.ALIVE:
+            drawGameElements();
+            break;
+        case STATES.GAMEOVER:
+            drawGameElements();
+            drawGameOver();
+            break;
+    }
+    if(MUTED) {
         drawMuted();
     }
-    if(welcome) {
-        drawWelcome();
-    }
-    else {
-        drawBricks();
-        gameBall.draw();
-        gamePaddle.draw();
-        drawScore();
-    }
+
     // Tick
-    if(alive) {
-        aliveTick();
+    switch(GAME_STATE) {
+        case STATES.WELCOME:
+            welcomeTick();
+            break;
+        case STATES.STEADY:
+            steadyTick();
+            break;
+        case STATES.ALIVE:
+            aliveTick();
+            break;
+        case STATES.GAMEOVER:
+            gameOverTick();
+            break;
     }
-    else if(steady) {
-        // Steady tick (TODO: Draw instructions/level select?)
-        // Draw steady text
-        drawSteady();
-        // Move paddle w/ keys
-        if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
-            gamePaddle.x += 7;
-            gameBall.x += 7;
-            if(fastArrowKeys) {
-                gamePaddle.x += 5;
-                gameBall.x += 5;
-            }
-        }
-        else if(leftPressed && gamePaddle.x > 0) {
-            gamePaddle.x -= 7;
-            gameBall.x -= 7;
-            if(fastArrowKeys) {
-                gamePaddle.x -= 5;
-                gameBall.x -= 5;
-            }
-        }
-        // Change state to alive
-        if(!spacePressed) {
-            steadyCanStart = true;
-        }
-        if(steadyClicked || (steadyCanStart && spacePressed)) {
-            steady = false;
-            steadyCanStart = false;
-            steadyClicked = false;
-            alive = true;
-            gameBall.initVel(3, -3);
-        }
-    }
-    else if(welcome) {
-        welcomeTick();
-    }
-    else {
-        gameOverTick();
-    }
+
     // Loop
     requestAnimationFrame(drawLoop);
 }
 
 
-// Start first game (TODO: Welcome state/screen?)
+// Start first game
 SOUND_FX.load_all();
+GAME_STATE = STATES.WELCOME;
 drawLoop();
