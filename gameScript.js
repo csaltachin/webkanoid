@@ -1,91 +1,38 @@
-// Webkanoid
+/**
+ * 
+ * webkanoid
+ * by Carlos Solano | csaltachin@gmail.com | repository at https://github.com/csaltachin/webkanoid
+ * -----------------------------------------------------------------------------------------------
+ * A simple Arkanoid/Breakout-style game, in pure JavaScript. Uses the Canvas API to draw graphics
+ * in a 2D context, as well as the AudioContext interface for buffered sound effects. These are
+ * obtained via XHR.
+ * 
+ */
 
 var DIR = "file:///C:/Users/csalt/Documents/Code/Web%20stuff/webkanoid"; // Replace with the directory containing this file
 var BUFFER_DIR = "http://198.58.107.90:1234/webkanoid";
 var canvas = document.getElementById("gameCanvas");
 var ctx = canvas.getContext("2d");
 
-var gameBall;
-var gamePaddle;
-
-var bricks = [];
-var brickRowCount = 14;
-var brickColumnCount = 14;
-var brickWidth = 75;
-var brickHeight = 20;
-var brickPadding = 10;
-var brickOffsetTop = 30;
-var brickOffsetLeft = 50;
-
 
 /**
  * Audio
  */
-var DEFAULT_VOL = 0.5;
-var CLONE_FX = true; // If true, use clonePlay over rewindPlay (buggy for now)
-var MUTED = false;
-
-class AudioFX extends Audio {
-    constructor(src) {
-        super(src);
-    }
-    clonePlay(volume) {
-        if(!MUTED) {
-            if(typeof volume == "undefined") {
-                volume = DEFAULT_VOL; // Default volume level for sound effects
-            }
-            var clone = this.cloneNode();
-            clone.volume = volume;
-            clone.play();
-        }
-    }
-    rewindPlay(volume) {
-        if(!MUTED) {
-            if(typeof volume == "undefined") {
-                volume = DEFAULT_VOL; // Default volume level for sound effects
-            }
-            this.volume = volume;
-            this.currentTime = 0;
-            this.play();
-        }
-    }
-    smartPlay() {
-        if(CLONE_FX) {
-            this.clonePlay();
-        }
-        else {
-            this.rewindPlay();
-        }
-    }
-}
-
-var SOUND_FX = {
-    // Effects
-    welcome: new AudioFX(DIR + "/fx/welcome.ogg"),
-    back_to_menu: new AudioFX(DIR + "/fx/back_to_menu.ogg"),
-    bounce_low: new AudioFX(DIR + "/fx/bounce_low.ogg"),
-    bounce_high: new AudioFX(DIR + "/fx/bounce_high.ogg"),
-    // Load method
-    load_all: function() {
-        for(const effect in this) {
-            if(effect == "load_all") {
-                continue;
-            }
-            this[effect].preload = "auto";
-            this[effect].load();
-        }
-        console.log("All audio effects loaded!");
-    }
-}
-
-/**
- * WebAudio (wip)
- */
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const audioCTX = new AudioContext();
+var DEFAULT_VOL = 0.5;
+var MUTED = false;
+// Buffers for all sound effects
+var SOUND_BUFFERS = {
+    welcome: null,
+    bounce_low: null,
+    bounce_high: null,
+    back_to_menu: null,
+    climb: null, // Debug sound
+}
 
-// This method loads a sound file at {url} as a buffer, and binds it to variable {buffer_placeholder}
-function loadSoundIntoBuffer(url, buffer_placeholder) {
+// Loads a sound file at {url} as a buffer, and binds it to a variable named "buffer_placeholder" in object "obj" (or window if none)
+function loadSoundIntoBuffer(url, holder_name, obj) {
     let req = new XMLHttpRequest();
     req.open("GET", url, true);
     req.responseType = "arraybuffer";
@@ -94,7 +41,12 @@ function loadSoundIntoBuffer(url, buffer_placeholder) {
         audioCTX.decodeAudioData(
             data,
             function(buffer) {
-                window[buffer_placeholder] = buffer;
+                if(typeof obj == "undefined") {
+                    window[holder_name] = buffer;
+                }
+                else {
+                    obj[holder_name] = buffer;
+                }
                 //console.log("> Sound file at " + url + " was succesfully loaded into a buffer!");
             },
             function(e) {
@@ -112,17 +64,51 @@ function loadSoundIntoBuffer(url, buffer_placeholder) {
     req.send();
 }
 
+// Plays sound from given AudioBuffer
 function playFromBuffer(buffer) {
-    let source = audioCTX.createBufferSource();
-    source.buffer = buffer;
-    source.connect(volumeGate);
-    source.onended = function() {
-        console.log("Finished playing a sound from a buffer.");
+    if(!MUTED) {
+        let source = audioCTX.createBufferSource();
+        source.buffer = buffer;
+        source.connect(volumeGate);
+        source.onended = function() {
+            console.log("Finished playing a sound from a buffer.");
+        }
+        source.start();
     }
-    source.start();
 }
 
-var climbBuffer;
+// Shorthand for playing sound from name
+function playFromName(name) {
+    playFromBuffer(SOUND_BUFFERS[name]);
+}
+
+// Sets up audioCTX to be ready for sound playback
+function setupAudioContext() {
+    // Create gain node for global volume control
+    volumeGate = audioCTX.createGain();
+    volumeGate.gain.value = DEFAULT_VOL; // Set default volume for the whole AudioContext
+    volumeGate.connect(audioCTX.destination);
+    // Load buffers for all sounds listed in SOUND_BUFFERS
+    for(let name in SOUND_BUFFERS) {
+        loadSoundIntoBuffer(BUFFER_DIR + "/fx/" + name + ".ogg", name, SOUND_BUFFERS);
+    }
+}
+
+
+/**
+ * Game elements
+ */
+var gameBall;
+var gamePaddle;
+
+var bricks = [];
+var brickRowCount = 14;
+var brickColumnCount = 14;
+var brickWidth = 75;
+var brickHeight = 20;
+var brickPadding = 10;
+var brickOffsetTop = 30;
+var brickOffsetLeft = 50;
 
 
 /**
@@ -264,7 +250,7 @@ function keyDownHandler(e) {
     }
     else if(e.key == "T" || e.key == "t") {
         if(!tPressed && audioCTX.state != "suspended") {
-            playFromBuffer(climbBuffer);
+            playFromBuffer(SOUND_BUFFERS.climb);
         }
         tPressed = true;
     }
@@ -273,16 +259,10 @@ function keyDownHandler(e) {
     if(audioCTX.state == "suspended") {
         audioCTX.resume().then(
             function() {
-                //console.log("DEBUG > AudioContext: audioCTX resumed succesfully!");
-                // Create gain node for volume control
-                volumeGate = audioCTX.createGain();
-                volumeGate.gain.value = DEFAULT_VOL; // Set default volume for the whole AudioContext
-                volumeGate.connect(audioCTX.destination);
-                // Load all sounds into buffers
-                loadSoundIntoBuffer(BUFFER_DIR + "/fx/climb.ogg", "climbBuffer", true);
+                console.log("> AudioContext: audioCTX resumed succesfully!");
             },
             function() {
-                console.log("DEBUG > Failed to resume AudioContext: audioCTX.")
+                console.log("> Failed to resume AudioContext: audioCTX.")
             }
         );
     }
@@ -343,7 +323,7 @@ function collisionDetection() {
                         gameBall.speedUp(1.03);
                     }
                     // Play sound effect
-                    SOUND_FX.bounce_high.smartPlay()
+                    playFromName("bounce_high");
             	}
             }
         }
@@ -354,16 +334,16 @@ function wallDetection() {
     // Handles wall collisions
     if(gameBall.x + gameBall.dx > canvas.width-gameBall.radius || gameBall.x + gameBall.dx < gameBall.radius) {
         gameBall.dx = -gameBall.dx;
-        SOUND_FX.bounce_low.smartPlay();
+        playFromName("bounce_low");
     }
     if(gameBall.y + gameBall.dy < gameBall.radius) {
         gameBall.dy = -gameBall.dy;
-        SOUND_FX.bounce_low.smartPlay();
+        playFromName("bounce_low");
     }
     else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius-gamePaddle.hover-gamePaddle.height) {
     	if(gameBall.y <= canvas.height-gameBall.radius-gamePaddle.hover && gamePaddle.x < gameBall.x && gameBall.x < gamePaddle.x + gamePaddle.width) {
             gameBall.dy = -gameBall.dy;
-            SOUND_FX.bounce_low.smartPlay();
+            playFromName("bounce_low");
         }
         else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius) {
         	// Update highscore, draw GAME OVER
@@ -542,7 +522,7 @@ function gameOverTick() {
     } else if(xPressed) {
         GAME_STATE = STATES.WELCOME;
         //console.log("Changed GAME_STATE to WELCOME");
-        SOUND_FX.back_to_menu.smartPlay();
+        playFromName("back_to_menu");
     }
 }
 
@@ -550,7 +530,7 @@ function welcomeTick() {
     if(spacePressed) {
         GAME_STATE = STATES.STEADY;
         //console.log("Changed GAME_STATE to STEADY");
-        SOUND_FX.welcome.smartPlay();
+        playFromName("welcome");
         initGame();
     }
 }
@@ -585,6 +565,7 @@ function steadyTick() {
         gameBall.initVel(3, -3);
     }
 }
+
 
 /*
  * Main draw loop
@@ -635,7 +616,9 @@ function drawLoop() {
 }
 
 
-// Start first game
-SOUND_FX.load_all();
+/**
+ * Startup code
+ */
+setupAudioContext();
 GAME_STATE = STATES.WELCOME;
 drawLoop();
