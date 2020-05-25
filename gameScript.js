@@ -1,6 +1,7 @@
 // Webkanoid
 
 var DIR = "file:///C:/Users/csalt/Documents/Code/Web%20stuff/webkanoid"; // Replace with the directory containing this file
+var BUFFER_DIR = "http://198.58.107.90:1234/webkanoid";
 var canvas = document.getElementById("gameCanvas");
 var ctx = canvas.getContext("2d");
 
@@ -16,8 +17,9 @@ var brickPadding = 10;
 var brickOffsetTop = 30;
 var brickOffsetLeft = 50;
 
+
 /**
- * Sound effects
+ * Audio
  */
 var DEFAULT_VOL = 0.5;
 var CLONE_FX = true; // If true, use clonePlay over rewindPlay (buggy for now)
@@ -76,6 +78,56 @@ var SOUND_FX = {
     }
 }
 
+/**
+ * WebAudio (wip)
+ */
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCTX = new AudioContext();
+
+// This method loads a sound file at {url} as a buffer, and binds it to variable {buffer_placeholder}
+function loadSoundIntoBuffer(url, buffer_placeholder) {
+    let req = new XMLHttpRequest();
+    req.open("GET", url, true);
+    req.responseType = "arraybuffer";
+    req.onload = function() {
+        let data = req.response;
+        audioCTX.decodeAudioData(
+            data,
+            function(buffer) {
+                window[buffer_placeholder] = buffer;
+                //console.log("> Sound file at " + url + " was succesfully loaded into a buffer!");
+            },
+            function(e) {
+                console.log("> Error decoding sound file at " + url + ": " + e.err);
+            }
+        ).then(
+            function() {
+                //console.log("DEBUG > Request to get [" + url + "] just loaded!");
+            },
+            function() {
+                console.log("> Request to get [" + url + "] failed.");
+            }
+        );
+    };
+    req.send();
+}
+
+function playFromBuffer(buffer) {
+    let source = audioCTX.createBufferSource();
+    source.buffer = buffer;
+    source.connect(volumeGate);
+    source.onended = function() {
+        console.log("Finished playing a sound from a buffer.");
+    }
+    source.start();
+}
+
+var climbBuffer;
+
+
+/**
+ * Score, states
+ */
 var score = 0;
 var highScore = 0;
 var fastArrowKeys = false;
@@ -94,6 +146,7 @@ var rightPressed = false;
 var leftPressed = false;
 var spacePressed = false;
 var xPressed = false;
+var tPressed = false;
 
 /*
  * Class definitions for Ball, Paddle
@@ -209,6 +262,30 @@ function keyDownHandler(e) {
     else if(e.key == "X" || e.key == "x") {
         xPressed = true;
     }
+    else if(e.key == "T" || e.key == "t") {
+        if(!tPressed && audioCTX.state != "suspended") {
+            playFromBuffer(climbBuffer);
+        }
+        tPressed = true;
+    }
+    
+    // Check for resuming audioCTX (because of autoplay restrictions)
+    if(audioCTX.state == "suspended") {
+        audioCTX.resume().then(
+            function() {
+                //console.log("DEBUG > AudioContext: audioCTX resumed succesfully!");
+                // Create gain node for volume control
+                volumeGate = audioCTX.createGain();
+                volumeGate.gain.value = DEFAULT_VOL; // Set default volume for the whole AudioContext
+                volumeGate.connect(audioCTX.destination);
+                // Load all sounds into buffers
+                loadSoundIntoBuffer(BUFFER_DIR + "/fx/climb.ogg", "climbBuffer", true);
+            },
+            function() {
+                console.log("DEBUG > Failed to resume AudioContext: audioCTX.")
+            }
+        );
+    }
 }
 function keyUpHandler(e) {
     if(e.key == "Right" || e.key == "ArrowRight") {
@@ -225,6 +302,9 @@ function keyUpHandler(e) {
     }
     else if(e.key == "X" || e.key == "x") {
         xPressed = false;
+    }
+    else if(e.key == "T" || e.key == "t") {
+        tPressed = false;
     }
 }
 function mouseMoveHandler(e) {
