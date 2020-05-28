@@ -3,19 +3,35 @@
 
 <head>
     <meta charset = "utf-8" />
-    <meta name = "author" content = "Carlos Solano Saltachin" />
+    <meta name = "author" content = "Carlos Solano" />
     <meta name = "description" content = "A simple Breakout/Arkanoid-style game in pure JavaScript." />
-    <title>Webkanoid</title>
+    <title>webkanoid</title>
     <style>
         * {padding: 0; margin: 0;}
         canvas {background: #eee; display: block; margin: 0 auto;}
+        body {
+            font-family: 'Consolas', "Courier";
+        }
+        /*
+        @font-face {
+            font-family: 'Comfortaa';
+            font-style: normal;
+            font-weight: 400;
+            src: url(https://fonts.gstatic.com/s/comfortaa/v28/1Pt_g8LJRfWJmhDAuUsSQamb1W0lwk4S4WjMDrMfIA.woff2) format('woff2');
+            unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+2000-206F, U+2074, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+        }
+        */
+        @font-face {
+            font-family: 'Consolas';
+            font-style: normal;
+            src: url(http://localhost/webkanoid/fonts/main_font.ttf) format('truetype');
+        }
     </style>
 </head>
 
 <body>
-<canvas id = "gameCanvas" width = "1280" height = "720"></canvas>
-<!-- Assumes script file is stored in the same directory -->
-<script src = "gameScript.js"></script>
+    <canvas id = "gameCanvas" width = "1280" height = "720"></canvas>
+    <!-- Assumes script file is stored in the same directory -->
+    <script src = "gameScript.js"></script>
 </body>
-
 </html>

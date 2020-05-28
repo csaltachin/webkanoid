@@ -1,23 +1,31 @@
-/**
- * 
- * webkanoid
- * by Carlos Solano | csaltachin@gmail.com | repository at https://github.com/csaltachin/webkanoid
- * -----------------------------------------------------------------------------------------------
- * A simple Arkanoid/Breakout-style game, in pure JavaScript. Uses the Canvas API to draw graphics
- * in a 2D context, as well as the AudioContext interface for buffered sound effects. These are
- * obtained via XHR.
- * 
- */
+//
+// 
+// webkanoid
+// by Carlos Solano | csaltachin@gmail.com | repository at https://github.com/csaltachin/webkanoid
+// -----------------------------------------------------------------------------------------------
+// A simple Arkanoid/Breakout-style game, in pure JavaScript. Uses the Canvas API to draw graphics
+// in a 2D context, as well as the AudioContext interface for buffered sound effects. These are
+// obtained via XHR.
+// 
+//
 
-var DIR = "file:///C:/Users/csalt/Documents/Code/Web%20stuff/webkanoid"; // Replace with the directory containing this file
-var BUFFER_DIR = "http://198.58.107.90:1234/webkanoid";
+
+// Global stuff
+var BUFFER_DIR = "";
 var canvas = document.getElementById("gameCanvas");
 var ctx = canvas.getContext("2d");
+var GLOBAL_FONT = "Consolas";
+
+// Draw "loading..." text
+ctx.font = "Bold 32px Courier";
+var loadingTextWidth = ctx.measureText("loading...").width;
+ctx.fillStyle = "#000000";
+ctx.fillText("loading...", canvas.width/2 - loadingTextWidth/2, canvas.height/2);
 
 
-/**
- * Audio
- */
+//
+// Audio
+//
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const audioCTX = new AudioContext();
 var DEFAULT_VOL = 0.5;
@@ -71,7 +79,7 @@ function playFromBuffer(buffer) {
         source.buffer = buffer;
         source.connect(volumeGate);
         source.onended = function() {
-            console.log("Finished playing a sound from a buffer.");
+            //console.log("Finished playing a sound from a buffer.");
         }
         source.start();
     }
@@ -90,14 +98,14 @@ function setupAudioContext() {
     volumeGate.connect(audioCTX.destination);
     // Load buffers for all sounds listed in SOUND_BUFFERS
     for(let name in SOUND_BUFFERS) {
-        loadSoundIntoBuffer(BUFFER_DIR + "/fx/" + name + ".ogg", name, SOUND_BUFFERS);
+        loadSoundIntoBuffer(`${BUFFER_DIR}fx/${name}.ogg`, name, SOUND_BUFFERS);
     }
 }
 
 
-/**
- * Game elements
- */
+//
+// Game elements
+//
 var gameBall;
 var gamePaddle;
 
@@ -111,9 +119,9 @@ var brickOffsetTop = 30;
 var brickOffsetLeft = 50;
 
 
-/**
- * Score, states
- */
+//
+// Score, states
+//
 var score = 0;
 var highScore = 0;
 var fastArrowKeys = false;
@@ -187,9 +195,9 @@ class Paddle {
 }
 
 
-/**
- * Initializer methods
- */
+//
+// Initializer methods
+//
 function initBall() {
     // Using default dimensions
     var b = new Ball(8);
@@ -218,17 +226,18 @@ function initGame() {
 }
 
 
-/**
- * Add key/mouse listeners
- */
+//
+// Add key/mouse listeners
+//
 document.addEventListener("keydown", keyDownHandler, false);
 document.addEventListener("keyup", keyUpHandler, false);
 document.addEventListener("mousemove", mouseMoveHandler, false);
 canvas.onclick = clickHandler;
 
-/**
- * Handler methods
- */
+
+//
+// Handler methods
+//
 function keyDownHandler(e) {
     if(e.key == "Right" || e.key == "ArrowRight") {
         rightPressed = true;
@@ -305,9 +314,10 @@ function clickHandler() {
     }
 }
 
-/*
- * Wall/collision methods
- */
+
+//
+// Wall/collision methods
+//
 function collisionDetection() {
     // Handles brick collisions
     for(var c=0; c<brickColumnCount; c++) {
@@ -357,9 +367,9 @@ function wallDetection() {
 }
 
 
-/*
- * Draw methods
- */
+//
+// Draw methods
+//
 function fillRoundRect(x, y, width, height, radius) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -378,23 +388,23 @@ function fillRoundRect(x, y, width, height, radius) {
 function drawBricks() {
     for(var c=0; c<brickColumnCount; c++) {
         for(var r=0; r<brickRowCount; r++) {
-        		if(bricks[c][r].status == 1) {
-            		var brickX = (c*(brickWidth+brickPadding))+brickOffsetLeft;
-            		var brickY = (r*(brickHeight+brickPadding))+brickOffsetTop;
-            		bricks[c][r].x = brickX;
-            		bricks[c][r].y = brickY;
-            		ctx.beginPath();
-            		ctx.rect(brickX, brickY, brickWidth, brickHeight);
-            		ctx.fillStyle = "#0095DD";
-            		ctx.fill();
-            		ctx.closePath();
+        	if(bricks[c][r].status == 1) {
+        		var brickX = (c*(brickWidth+brickPadding))+brickOffsetLeft;
+        		var brickY = (r*(brickHeight+brickPadding))+brickOffsetTop;
+        		bricks[c][r].x = brickX;
+            	bricks[c][r].y = brickY;
+            	ctx.beginPath();
+        		ctx.rect(brickX, brickY, brickWidth, brickHeight);
+        		ctx.fillStyle = "#005fcc"; // Default is #0095DD;
+        		ctx.fill();
+          		ctx.closePath();
             }
         }
     }
 }
 
 function drawScore() {
-	ctx.font = "16px Consolas";
+	ctx.font = "16px " + GLOBAL_FONT;
     ctx.fillStyle = "#446673";
     ctx.fillText("score: " + score, 8, 20);
 }
@@ -408,14 +418,14 @@ function drawGameElements() {
 }
 
 function drawMuted() {
-    ctx.font = "16px Consolas";
-    var thisWidth = ctx.measureText("[muted]").width;
+    ctx.font = "16px " + GLOBAL_FONT;
+    let thisWidth = ctx.measureText("[muted]").width;
     ctx.fillStyle = "#446673";
     ctx.fillText("[muted]", canvas.width - thisWidth - 8, 20);
 }
 
 function drawGameOver() {
-    ctx.font = "Bold 40px Consolas";
+    ctx.font = "Bold 40px " + GLOBAL_FONT;
     var textDims = ctx.measureText("game over");
 
     ctx.fillStyle = "#40414a";
@@ -426,14 +436,14 @@ function drawGameOver() {
     ctx.fillStyle = "#ffffff";
     ctx.fillText("game over", canvas.width/2 - textDims.width/2, canvas.height/2 + 15);
     
-    ctx.font = "20px Consolas";
+    ctx.font = "20px " + GLOBAL_FONT;
     textDims = ctx.measureText("final score: " + score);
     ctx.fillText("final score: " + score, canvas.width/2 - textDims.width/2, canvas.height/2 + 40);
     textDims = ctx.measureText("highscore: " + score);
     ctx.fillText("highscore: " + highScore, canvas.width/2 - textDims.width/2, canvas.height/2 + 60);
 
-    ctx.font = "Bold 18px Consolas"
-    ctx.fillStyle = "#000000"
+    ctx.font = "Bold 18px " + GLOBAL_FONT;
+    ctx.fillStyle = "#000000";
     var smallWidth = ctx.measureText("press [SPACE] to play again").width;
     ctx.fillText("press [SPACE] to play again", canvas.width/2 - smallWidth/2, canvas.height/2 + 225);
     var smallerWidth = ctx.measureText("press [X] to return to main menu").width;
@@ -441,7 +451,7 @@ function drawGameOver() {
 }
 
 function drawWelcome() {
-    ctx.font = "Bold 80px Consolas";
+    ctx.font = "Bold 80px " + GLOBAL_FONT;
     bigWidth = ctx.measureText("webkanoid").width;
 
     // Rounded rectangle
@@ -456,8 +466,8 @@ function drawWelcome() {
     ctx.fillText("webkanoid", canvas.width/2 - bigWidth/2, canvas.height/2);
 
     // Small text
-    ctx.font = "Bold 18px Consolas"
-    ctx.fillStyle = "#000000"
+    ctx.font = "Bold 18px " + GLOBAL_FONT;
+    ctx.fillStyle = "#000000";
     smallWidth = ctx.measureText("press [SPACE] to begin!").width;
     ctx.fillText("press [SPACE] to begin!", canvas.width/2 - smallWidth/2, canvas.height/2 + 70);
     smallerWidth = ctx.measureText("press [M] to toggle sound").width;
@@ -465,8 +475,8 @@ function drawWelcome() {
 }
 
 function drawSteady() {
-    ctx.font = "Bold 18px Consolas"
-    ctx.fillStyle = "#000000"
+    ctx.font = "Bold 18px " + GLOBAL_FONT;
+    ctx.fillStyle = "#000000";
     var smallWidth = ctx.measureText("move with mouse or arrow keys (hold [Z] to boost key movement)").width;
     ctx.fillText("move with mouse or arrow keys (hold [Z] to boost key movement)", canvas.width/2 - smallWidth/2, canvas.height/2 + 225);
     var smallerWidth = ctx.measureText("click or press [SPACE] to release the ball!").width;
@@ -474,9 +484,9 @@ function drawSteady() {
 }
 
 
-/**
- * Tick updaters
-*/
+//
+// Tick updaters
+//
 function steadyTick() {
     // Move paddle and
     if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
@@ -616,9 +626,25 @@ function drawLoop() {
 }
 
 
-/**
- * Startup code
- */
-setupAudioContext();
-GAME_STATE = STATES.WELCOME;
-drawLoop();
+//
+// Startup code
+//
+function masterStart() {
+    // Check if main font finished loading
+    if(document.fonts.check("12px " + GLOBAL_FONT)) {
+        console.log("Main font loaded on time!");
+    }
+    else {
+        console.log("Main font failed to load on time.");
+    }
+    setupAudioContext();
+    GAME_STATE = STATES.WELCOME;
+    drawLoop();
+}
+
+// Start when the main font is loaded
+document.fonts.onloadingdone = masterStart;
+// Draw ghost text to force main font to load
+ctx.font = "24px " + GLOBAL_FONT;
+ctx.fillStyle = "#eeeeee";
+ctx.fillText(".", 0, 0);
