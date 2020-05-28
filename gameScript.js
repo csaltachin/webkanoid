@@ -117,6 +117,7 @@ var brickHeight = 20;
 var brickPadding = 10;
 var brickOffsetTop = 30;
 var brickOffsetLeft = 50;
+var strokeBrick = true;
 
 
 //
@@ -318,28 +319,78 @@ function clickHandler() {
 //
 // Wall/collision methods
 //
+function brickCollision(br) {
+    let strip_v = br.x <= gameBall.x && gameBall.x <= br.x + brickWidth;
+    let strip_h = br.y <= gameBall.y && gameBall.y <= br.y + brickHeight;
+    let collided = false;
+    // Check edges
+    if(strip_v) {
+        // Moving downwards
+        if(gameBall.dy > 0 && br.y <= gameBall.y + gameBall.radius && gameBall.y + gameBall.radius <= br.y + brickHeight) {
+            gameBall.dy = -gameBall.dy;
+            collided = true;
+        }
+        // Moving upwards
+        else if(gameBall.dy < 0 && br.y <= gameBall.y - gameBall.radius && gameBall.y - gameBall.radius <= br.y + brickHeight) {
+            gameBall.dy = -gameBall.dy;
+            collided = true;
+        }
+    }
+    else if(strip_h) {
+        // Moving to the right
+        if(gameBall.dx > 0 && br.x <= gameBall.x + gameBall.radius && gameBall.x + gameBall.radius <= br.x + brickWidth) {
+            gameBall.dx = -gameBall.dx;
+            collided = true;
+        }
+        // Moving to the left
+        else if(gameBall.dx < 0 && br.x <= gameBall.x - gameBall.radius && gameBall.x - gameBall.radius <= br.x + brickWidth) {
+            gameBall.dx = -gameBall.dx;
+            collided = true;
+        }
+    }
+    // Check corner regions
+    else {
+        // Find closest corner to ball center
+        let corner;
+        let min_d = canvas.width;
+        for(pt of [{x: br.x, y: br.y}, {x: br.x + brickWidth, y: br.y}, {x: br.x, y: br.y + brickHeight}, {x: br.x + brickWidth, y: br.y + brickHeight}]) {
+            let this_d = Math.sqrt(Math.pow(gameBall.x - pt.x, 2) + Math.pow(gameBall.y - pt.y, 2));
+            if(this_d < min_d) {
+                min_d = this_d;
+                corner = pt;
+            }
+        }
+        // Check for collision
+        if(min_d < gameBall.radius) {
+            let dist_x = gameBall.x - corner.x;
+            let dist_y = gameBall.y - corner.y;
+            let k = - (2*gameBall.dx*dist_x + 2*gameBall.dy*dist_y) / (Math.pow(dist_x, 2) + Math.pow(dist_y, 2));
+            gameBall.dx += k*dist_x;
+            gameBall.dy += k*dist_y;
+            collided = true; 
+        }
+    }
+    return collided;
+}
+
 function collisionDetection() {
     // Handles brick collisions
     for(var c=0; c<brickColumnCount; c++) {
         for(var r=0; r<brickRowCount; r++) {
-            var b = bricks[c][r];
-            if(b.status == 1) {
-            	if(gameBall.x > b.x && gameBall.x < b.x+brickWidth && gameBall.y > b.y && gameBall.y < b.y+brickHeight) {
-            		gameBall.dy = -gameBall.dy;
-                    b.status = 0;
-                    // Add point, speed up ball every 7 pts (by default)
-                    score++;
-                    if(score%7 == 0) {
-                        gameBall.speedUp(1.03);
-                    }
-                    // Play sound effect
-                    playFromName("bounce_high");
-            	}
+            let b = bricks[c][r];
+            if(b.status == 1 && brickCollision(b)) {
+                b.status = 0;
+                // Add point, speed up ball every 7 pts (by default)
+                score++;
+                if(score%5 == 0) {
+                    gameBall.speedUp(1.05);
+                }
+                // Play sound effect
+                playFromName("bounce_high");
             }
         }
     }
 }
-
 function wallDetection() {
     // Handles wall collisions
     if(gameBall.x + gameBall.dx > canvas.width-gameBall.radius || gameBall.x + gameBall.dx < gameBall.radius) {
@@ -396,7 +447,11 @@ function drawBricks() {
             	ctx.beginPath();
         		ctx.rect(brickX, brickY, brickWidth, brickHeight);
         		ctx.fillStyle = "#005fcc"; // Default is #0095DD;
-        		ctx.fill();
+                ctx.fill();
+                if(strokeBrick) {
+                    ctx.strokeStyle = "#006be8";
+                    ctx.stroke();
+                }
           		ctx.closePath();
             }
         }
@@ -488,7 +543,7 @@ function drawSteady() {
 // Tick updaters
 //
 function steadyTick() {
-    // Move paddle and
+    // Move paddle and accelerate if Z is pressed
     if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
         gamePaddle.x += 7;
     }
