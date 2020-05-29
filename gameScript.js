@@ -1,4 +1,4 @@
-//
+// ======================================================================================================================================
 // 
 // webkanoid
 // by Carlos Solano | csaltachin@gmail.com | repository at https://github.com/csaltachin/webkanoid
@@ -7,7 +7,7 @@
 // in a 2D context, as well as the AudioContext interface for buffered sound effects. These are
 // obtained via XHR.
 // 
-//
+// ======================================================================================================================================
 
 
 // Global stuff
@@ -23,12 +23,12 @@ ctx.fillStyle = "#000000";
 ctx.fillText("loading...", canvas.width/2 - loadingTextWidth/2, canvas.height/2);
 
 
-//
+// ======================================================================================================================================
 // Audio
-//
+// ======================================================================================================================================
 const AudioContext = window.AudioContext || window.webkitAudioContext;
 const audioCTX = new AudioContext();
-var DEFAULT_VOL = 0.5;
+var DEFAULT_VOL = 0.35;
 var MUTED = false;
 // Buffers for all sound effects
 var SOUND_BUFFERS = {
@@ -102,10 +102,24 @@ function setupAudioContext() {
     }
 }
 
+// Check if audioCTX is suspended, if so try to resume
+function checkAudio() {
+    if(audioCTX.state == "suspended") {
+        audioCTX.resume().then(
+            function() {
+                console.log("> AudioContext: audioCTX resumed succesfully!");
+            },
+            function() {
+                console.log("> Failed to resume AudioContext: audioCTX.")
+            }
+        );
+    }
+}
 
-//
+
+// ======================================================================================================================================
 // Game elements
-//
+// ======================================================================================================================================
 var gameBall;
 var gamePaddle;
 
@@ -120,12 +134,16 @@ var brickOffsetLeft = 50;
 var strokeBrick = true;
 
 
-//
+// ======================================================================================================================================
 // Score, states
-//
+// ======================================================================================================================================
 var score = 0;
 var highScore = 0;
 var fastArrowKeys = false;
+
+var LEVELS;
+var CURRENT_LEVEL = 0; // Level at game start
+const AVAILABLE_LEVELS = 2; // Total existing levels so far
 
 var GAME_STATE;
 const STATES = {
@@ -142,10 +160,12 @@ var leftPressed = false;
 var spacePressed = false;
 var xPressed = false;
 var tPressed = false;
+var FPStime = new Date();
 
-/*
- * Class definitions for Ball, Paddle
- */
+
+// ======================================================================================================================================
+// Class definitions for Ball, Paddle
+// ======================================================================================================================================
 class Ball {
     constructor(r) {
         this.radius = r;
@@ -196,13 +216,38 @@ class Paddle {
 }
 
 
-//
+// ======================================================================================================================================
+// Level fetching/loading
+// ======================================================================================================================================
+function loadLevel(level_num) {
+    let filename = level_num + ".json";
+    if(level_num < 10) {
+        filename = "0" + filename;
+    }
+    // Get level json via XHR
+    let req = new XMLHttpRequest();
+    req.open("GET", `levels/${filename}`, true);
+    req.responseType = "json";
+    req.onload = function() {
+        console.log(`Loaded level ${level_num} [${req.response.name}]`);
+        LEVELS[level_num] = req.response;
+    };
+    req.send();
+}
+function loadAllLevels() {
+    for(i = 0; i < AVAILABLE_LEVELS; i++) {
+        loadLevel(i);
+    }
+}
+
+
+// ======================================================================================================================================
 // Initializer methods
-//
+// ======================================================================================================================================
 function initBall() {
     // Using default dimensions
     var b = new Ball(8);
-    b.initPos(canvas.width/2, canvas.height-30);
+    b.initPos(canvas.width/2, canvas.height-32);
     return b;
 }
 function initPaddle() {
@@ -211,34 +256,43 @@ function initPaddle() {
     p.init();
     return p;
 }
-function initBricks() {
+function initBricks(level_grid) {
+    let grid_given = level_grid != "undefined";
     for(var c=0; c<brickColumnCount; c++) {
         bricks[c] = [];
         for(var r=0; r<brickRowCount; r++) {
-            bricks[c][r] = { x: 0, y: 0, status: 1 };
+            let this_status = 1; // Default to full grid (same as 00 default)
+            if(grid_given) {
+                this_status = level_grid[r][c]; // Transpose, so that grid looks the same in-game as in the json file
+            }
+            bricks[c][r] = {
+                x: c*(brickWidth+brickPadding) + brickOffsetLeft,
+                y: r*(brickHeight+brickPadding) + brickOffsetTop,
+                status: this_status,
+            }
         }
     }
 }
 function initGame() {
-    initBricks();
+    initBricks(LEVELS[CURRENT_LEVEL].grid);
     gameBall = initBall();
     gamePaddle = initPaddle();
     score = 0;
 }
 
 
-//
+// ======================================================================================================================================
 // Add key/mouse listeners
-//
+// ======================================================================================================================================
 document.addEventListener("keydown", keyDownHandler, false);
 document.addEventListener("keyup", keyUpHandler, false);
 document.addEventListener("mousemove", mouseMoveHandler, false);
 canvas.onclick = clickHandler;
 
 
-//
+// ======================================================================================================================================
 // Handler methods
-//
+// ======================================================================================================================================
 function keyDownHandler(e) {
     if(e.key == "Right" || e.key == "ArrowRight") {
         rightPressed = true;
@@ -264,18 +318,8 @@ function keyDownHandler(e) {
         }
         tPressed = true;
     }
-    
-    // Check for resuming audioCTX (because of autoplay restrictions)
-    if(audioCTX.state == "suspended") {
-        audioCTX.resume().then(
-            function() {
-                console.log("> AudioContext: audioCTX resumed succesfully!");
-            },
-            function() {
-                console.log("> Failed to resume AudioContext: audioCTX.")
-            }
-        );
-    }
+    // Resume audio if suspended (autoplay restrictions)
+    checkAudio();
 }
 function keyUpHandler(e) {
     if(e.key == "Right" || e.key == "ArrowRight") {
@@ -306,6 +350,18 @@ function mouseMoveHandler(e) {
                 gameBall.x = relativeX;
             }
         }
+        else if(relativeX <= gamePaddle.width/2) {
+            gamePaddle.x = 0;
+            if(GAME_STATE == STATES.STEADY) {
+                gameBall.x = gamePaddle.width/2;
+            }
+        }
+        else if(canvas.width - gamePaddle.width/2 <= relativeX) {
+            gamePaddle.x = canvas.width - gamePaddle.width;
+            if(GAME_STATE == STATES.STEADY) {
+                gameBall.x = canvas.width - gamePaddle.width/2;
+            }
+        }
     }
 }
 function clickHandler() {
@@ -313,12 +369,14 @@ function clickHandler() {
     if(GAME_STATE == STATES.STEADY) {
         steadyClicked = true;
     }
+    // Resume audio if suspended (autoplay restrictions)
+    checkAudio();
 }
 
 
-//
+// ======================================================================================================================================
 // Wall/collision methods
-//
+// ======================================================================================================================================
 function brickCollision(br) {
     let strip_v = br.x <= gameBall.x && gameBall.x <= br.x + brickWidth;
     let strip_h = br.y <= gameBall.y && gameBall.y <= br.y + brickHeight;
@@ -379,7 +437,7 @@ function collisionDetection() {
         for(var r=0; r<brickRowCount; r++) {
             let b = bricks[c][r];
             if(b.status == 1 && brickCollision(b)) {
-                b.status = 0;
+                b.status--;
                 // Add point, speed up ball every 7 pts (by default)
                 score++;
                 if(score%5 == 0) {
@@ -401,12 +459,13 @@ function wallDetection() {
         gameBall.dy = -gameBall.dy;
         playFromName("bounce_low");
     }
-    else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius-gamePaddle.hover-gamePaddle.height) {
+    // Check if ball is bouncing from pad, or lost
+    else if(gameBall.dy > 0 && gameBall.y + gameBall.dy > canvas.height-gameBall.radius-gamePaddle.hover-gamePaddle.height) {
     	if(gameBall.y <= canvas.height-gameBall.radius-gamePaddle.hover && gamePaddle.x < gameBall.x && gameBall.x < gamePaddle.x + gamePaddle.width) {
             gameBall.dy = -gameBall.dy;
             playFromName("bounce_low");
         }
-        else if(gameBall.y + gameBall.dy > canvas.height-gameBall.radius) {
+        else if(gameBall.y - gameBall.radius > canvas.height) {
         	// Update highscore, draw GAME OVER
             if(score > highScore) {
         		highScore = score;
@@ -418,9 +477,9 @@ function wallDetection() {
 }
 
 
-//
+// ======================================================================================================================================
 // Draw methods
-//
+// ======================================================================================================================================
 function fillRoundRect(x, y, width, height, radius) {
     ctx.beginPath();
     ctx.moveTo(x + radius, y);
@@ -439,13 +498,10 @@ function fillRoundRect(x, y, width, height, radius) {
 function drawBricks() {
     for(var c=0; c<brickColumnCount; c++) {
         for(var r=0; r<brickRowCount; r++) {
-        	if(bricks[c][r].status == 1) {
-        		var brickX = (c*(brickWidth+brickPadding))+brickOffsetLeft;
-        		var brickY = (r*(brickHeight+brickPadding))+brickOffsetTop;
-        		bricks[c][r].x = brickX;
-            	bricks[c][r].y = brickY;
+            let b = bricks[c][r];
+        	if(b.status == 1) {
             	ctx.beginPath();
-        		ctx.rect(brickX, brickY, brickWidth, brickHeight);
+        		ctx.rect(b.x, b.y, brickWidth, brickHeight);
         		ctx.fillStyle = "#005fcc"; // Default is #0095DD;
                 ctx.fill();
                 if(strokeBrick) {
@@ -464,12 +520,31 @@ function drawScore() {
     ctx.fillText("score: " + score, 8, 20);
 }
 
+function drawLevelName(name) {
+	ctx.font = "Bold 16px " + GLOBAL_FONT;
+    ctx.fillStyle = "#40414a";
+    ctx.fillText(name, canvas.width/2 - ctx.measureText(name).width/2, 20);
+}
+
+function drawFPS(frame_ms) {
+    let fps_str = `[${Math.trunc(1000.0/frame_ms)} FPS]`;
+    if(1000.0/frame_ms >= 1000) {
+        fps_str = "[1000+ FPS]";
+    }
+	ctx.font = "Bold 16px " + GLOBAL_FONT;
+    ctx.fillStyle = "#002c5e";
+    ctx.fillText(fps_str, 3*canvas.width/4 - ctx.measureText(fps_str).width/2, 20);
+}
+
+// --- Below are state draws (more general, use the above) and text draws
+
 // Encompasses ball, paddle, bricks, score
 function drawGameElements() {
     drawBricks();
     gameBall.draw();
     gamePaddle.draw();
     drawScore();
+    drawLevelName(LEVELS[CURRENT_LEVEL].name);
 }
 
 function drawMuted() {
@@ -539,9 +614,9 @@ function drawSteady() {
 }
 
 
-//
+// ======================================================================================================================================
 // Tick updaters
-//
+// ======================================================================================================================================
 function steadyTick() {
     // Move paddle and accelerate if Z is pressed
     if(rightPressed && gamePaddle.x < canvas.width-gamePaddle.width) {
@@ -632,10 +707,13 @@ function steadyTick() {
 }
 
 
-/*
- * Main draw loop
- */
+// ======================================================================================================================================
+// Main draw loop
+// ======================================================================================================================================
 function drawLoop() {
+    // (start frame timer)
+    frameS = (new Date()).getTime();
+    
     // Clear
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -676,22 +754,31 @@ function drawLoop() {
             break;
     }
 
+    // (draw FPS)
+    let frame_len = (new Date()).getTime() - frameS;
+    if(frame_len > 16.667) {
+        console.log("FPS dropped below 60!");
+    }
+    drawFPS(frame_len);
+
     // Loop
     requestAnimationFrame(drawLoop);
 }
 
 
-//
+// ======================================================================================================================================
 // Startup code
-//
+// ======================================================================================================================================
 function masterStart() {
     // Check if main font finished loading
     if(document.fonts.check("12px " + GLOBAL_FONT)) {
         console.log("Main font loaded on time!");
     }
     else {
-        console.log("Main font failed to load on time.");
+        console.log("Main font failed to load on time, using Courier.");
+        GLOBAL_FONT = "Courier";
     }
+    // Startup methods
     setupAudioContext();
     GAME_STATE = STATES.WELCOME;
     drawLoop();
@@ -699,6 +786,9 @@ function masterStart() {
 
 // Start when the main font is loaded
 document.fonts.onloadingdone = masterStart;
+// Start loading levels
+LEVELS = new Array(AVAILABLE_LEVELS);
+loadAllLevels();
 // Draw ghost text to force main font to load
 ctx.font = "24px " + GLOBAL_FONT;
 ctx.fillStyle = "#eeeeee";
