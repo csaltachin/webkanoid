@@ -140,6 +140,7 @@ var strokeBrick = true;
 var score = 0;
 var highScore = 0;
 var fastArrowKeys = false;
+var showFPS = false;
 
 var LEVELS;
 var CURRENT_LEVEL = 0; // Level at game start
@@ -160,7 +161,8 @@ var leftPressed = false;
 var spacePressed = false;
 var xPressed = false;
 var tPressed = false;
-var FPStime = new Date();
+var aPressed = false;
+var dPressed = false;
 
 
 // ======================================================================================================================================
@@ -239,6 +241,20 @@ function loadAllLevels() {
         loadLevel(i);
     }
 }
+function previousLevel() {
+    CURRENT_LEVEL--;
+    if(CURRENT_LEVEL < 0) {
+        CURRENT_LEVEL = AVAILABLE_LEVELS - 1; // Set to last
+    }
+    initBricks(LEVELS[CURRENT_LEVEL].grid)
+}
+function nextLevel() {
+    CURRENT_LEVEL++;
+    if(CURRENT_LEVEL == AVAILABLE_LEVELS) {
+        CURRENT_LEVEL = 0; // Set to first
+    }
+    initBricks(LEVELS[CURRENT_LEVEL].grid)
+}
 
 
 // ======================================================================================================================================
@@ -294,51 +310,93 @@ canvas.onclick = clickHandler;
 // Handler methods
 // ======================================================================================================================================
 function keyDownHandler(e) {
-    if(e.key == "Right" || e.key == "ArrowRight") {
-        rightPressed = true;
-    }
-    else if(e.key == "Left" || e.key == "ArrowLeft") {
-        leftPressed = true;
-    }
-    else if(e.key == " ") {
-        spacePressed = true;
-    }
-    else if(e.key == "M" || e.key == "m") {
-        MUTED = !MUTED;
-    }
-    else if(e.key == "Z" || e.key == "z") {
-        fastArrowKeys = true;
-    }
-    else if(e.key == "X" || e.key == "x") {
-        xPressed = true;
-    }
-    else if(e.key == "T" || e.key == "t") {
-        if(!tPressed && audioCTX.state != "suspended") {
-            playFromBuffer(SOUND_BUFFERS.climb);
-        }
-        tPressed = true;
-    }
     // Resume audio if suspended (autoplay restrictions)
     checkAudio();
+    // Handle each key
+    switch(e.key) {
+        case "Right":
+        case "ArrowRight":
+            rightPressed = true;
+            break;
+        case "Left":
+        case "ArrowLeft":
+            leftPressed = true;
+            break;
+        case " ":
+            spacePressed = true;
+            break;
+        case "M":
+        case "m":
+            MUTED = !MUTED;
+            break;
+        case "Z":
+        case "z":
+            fastArrowKeys = true;
+            break;
+        case "X":
+        case "x":
+            xPressed = true;
+            break;
+        case "T":
+        case "t":
+            if(!tPressed && audioCTX.state != "suspended") {
+                playFromBuffer(SOUND_BUFFERS.climb);
+                showFPS = !showFPS;
+            }
+            tPressed = true;
+            break;
+        case "A":
+        case "a":
+            if(!aPressed && GAME_STATE == STATES.STEADY) {
+                // Init previous level
+                previousLevel();
+
+            }
+            aPressed = true;
+            break;
+        case "D":
+        case "d":
+            if(!dPressed && GAME_STATE == STATES.STEADY) {
+                // Init next level
+                nextLevel();
+            }
+            dPressed = true;
+            break;
+    }
 }
 function keyUpHandler(e) {
-    if(e.key == "Right" || e.key == "ArrowRight") {
-        rightPressed = false;
-    }
-    else if(e.key == "Left" || e.key == "ArrowLeft") {
-        leftPressed = false;
-    }
-    else if(e.key == " ") {
-        spacePressed = false;
-    }
-    else if(e.key == "Z" || e.key == "z") {
-        fastArrowKeys = false;
-    }
-    else if(e.key == "X" || e.key == "x") {
-        xPressed = false;
-    }
-    else if(e.key == "T" || e.key == "t") {
-        tPressed = false;
+    switch(e.key) {
+        case "Right":
+        case "ArrowRight":
+            rightPressed = false;
+            break;
+        case "Left":
+        case "ArrowLeft":
+            leftPressed = false;
+            break;
+        case " ":
+            spacePressed = false;
+            break;
+        case "Z":
+        case "z":
+            fastArrowKeys = false;
+            break;
+        case "X":
+        case "x":
+            xPressed = false;
+            break;
+        case "T":
+        case "t":
+            tPressed = false;
+            break;
+        case "A":
+        case "a":
+            aPressed = false;
+            break;
+        case "D":
+        case "d":
+            dPressed = false;
+            break;
     }
 }
 function mouseMoveHandler(e) {
@@ -759,7 +817,9 @@ function drawLoop() {
     if(frame_len > 16.667) {
         console.log("FPS dropped below 60!");
     }
-    drawFPS(frame_len);
+    if(showFPS) {
+        drawFPS(frame_len);
+    }
 
     // Loop
     requestAnimationFrame(drawLoop);
